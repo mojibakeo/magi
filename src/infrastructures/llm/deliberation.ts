@@ -91,6 +91,8 @@ export type VoteResult = {
   concern: string
   suggestion: string
   reason: string // backward compatibility (combined summary)
+  unresolvable: boolean // この議論は本質的に解決不可能か
+  unresolvableReason: string // 解決不可能と判断した理由
 }
 
 export type DeliberationEvent =
@@ -115,6 +117,12 @@ export type DeliberationEvent =
       round: number
       votes: VoteResult[]
     }
+  | {
+      type: "discussion_rejected"
+      reason: string
+      round: number
+      votes: VoteResult[]
+    }
   | { type: "error"; system: MagiSystem; error: string }
 
 const parseVoteStatus = (voteText: string | undefined): VoteStatus => {
@@ -129,6 +137,11 @@ const extractSection = (response: string, sectionName: string): string => {
   const regex = new RegExp(`${sectionName}:\\s*([\\s\\S]*?)(?=\\n(?:VOTE|AGREEMENT|CONCERN|SUGGESTION):|$)`, "i")
   const match = response.match(regex)
   return match?.[1]?.trim() ?? ""
+}
+
+const parseUnresolvable = (response: string): boolean => {
+  const match = response.match(/UNRESOLVABLE:\s*(YES|NO)/i)
+  return match?.[1]?.toUpperCase() === "YES"
 }
 
 const voteOnConclusion = async (
@@ -165,6 +178,12 @@ CONCERN: 懸念点や改善が必要な点（なければ「なし」、箇条�
 
 SUGGESTION: より良い結論にするための具体的な提案（なければ「なし」）
 
+UNRESOLVABLE: YES / NO
+- YES: この議論は本質的に解決不可能である（議論を継続しても改善が見込めない）
+- NO: この議論は継続すれば改善できる可能性がある
+
+UNRESOLVABLE_REASON: UNRESOLVABLE が YES の場合、その理由を記述（NO の場合は「なし」）
+
 重要：
 - **最重要：ユーザーの元の質問・依頼に対して直接回答しているかを最優先で評価する**
 - ユーザーが求めていることを満たさない結論には必ず REJECT を投じる
@@ -172,7 +191,13 @@ SUGGESTION: より良い結論にするための具体的な提案（なけれ�
 - 自分の分析と完全に一致しなくても、論理的に妥当であれば APPROVE または PARTIAL を選ぶ
 - REJECT は以下の場合に選択する：
   1. ユーザーの依頼に対する回答になっていない
-  2. 重大な事実誤認や論理的欠陥がある`,
+  2. 重大な事実誤認や論理的欠陥がある
+- UNRESOLVABLE は以下の場合に YES を選択する：
+  1. 質問が曖昧すぎて、どう解釈しても的確な回答が不可能
+  2. 存在しない情報や将来の予測など、本質的に答えが出せない
+  3. 矛盾した要求をしており、どちらかを選ばざるを得ない
+  4. 必要な情報が根本的に不足しており、推測に頼らざるを得ない
+  5. 議論を何度繰り返しても精度向上が見込めない`,
         },
       ],
     }
@@ -184,6 +209,8 @@ SUGGESTION: より良い結論にするための具体的な提案（なけれ�
       const agreement = extractSection(response, "AGREEMENT")
       const concern = extractSection(response, "CONCERN")
       const suggestion = extractSection(response, "SUGGESTION")
+      const unresolvable = parseUnresolvable(response)
+      const unresolvableReason = extractSection(response, "UNRESOLVABLE_REASON")
 
       const reason = concern && concern !== "なし" ? concern : agreement
 
@@ -195,6 +222,8 @@ SUGGESTION: より良い結論にするための具体的な提案（なけれ�
         concern,
         suggestion,
         reason,
+        unresolvable,
+        unresolvableReason: unresolvableReason !== "なし" ? unresolvableReason : "",
       }
     } catch (error) {
       console.error(`Vote failed for ${system}:`, error)
@@ -206,6 +235,8 @@ SUGGESTION: より良い結論にするための具体的な提案（なけれ�
         concern: "投票エラー",
         suggestion: "",
         reason: "投票エラー",
+        unresolvable: false,
+        unresolvableReason: "",
       }
     }
   })
@@ -433,6 +464,23 @@ export const deliberate = async function* (
     const approved = totalScore >= 2
 
     yield { type: "voting_complete", approved, votes }
+
+    // 2つ以上のLLMが解決不可能と判断した場合、議論を終了
+    const unresolvableCount = votes.filter((v) => v.unresolvable).length
+    if (unresolvableCount >= 2) {
+      const unresolvableReasons = votes
+        .filter((v) => v.unresolvable && v.unresolvableReason)
+        .map((v) => `${v.system.toUpperCase()}: ${v.unresolvableReason}`)
+        .join("\n")
+
+      yield {
+        type: "discussion_rejected",
+        reason: unresolvableReasons || "この議論は本質的に解決不可能と判断されました",
+        round: roundNumber,
+        votes,
+      }
+      return
+    }
 
     // minRounds 以上かつスコア2pt以上で合意成立
     if (approved && roundNumber >= config.minRounds) {

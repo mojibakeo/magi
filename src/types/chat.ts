@@ -17,6 +17,8 @@ export type VoteData = {
   concern: string
   suggestion: string
   reason: string
+  unresolvable: boolean // この議論は本質的に解決不可能か
+  unresolvableReason: string // 解決不可能と判断した理由
 }
 
 export type RoundData = {
@@ -61,4 +63,5 @@ export type StreamingState = {
   rounds: RoundData[]
   currentConclusion?: string
   finalVotes?: VoteData[]
+  rejectionReason?: string // 議論が解決不可能と判断されて終了した場合の理由
 }

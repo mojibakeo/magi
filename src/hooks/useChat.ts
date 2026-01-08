@@ -21,6 +21,7 @@ const initialStreamingState: StreamingState = {
   rounds: [],
   currentConclusion: undefined,
   finalVotes: undefined,
+  rejectionReason: undefined,
 }
 
 export const useChat = () => {
@@ -105,6 +106,7 @@ export const useChat = () => {
         rounds: [],
         currentConclusion: undefined,
         finalVotes: undefined,
+        rejectionReason: undefined,
       })
 
       try {
@@ -207,6 +209,17 @@ export const useChat = () => {
                     isStreaming: false,
                     currentConclusion: event.conclusion,
                     finalVotes: event.votes,
+                  }))
+                  await fetchChat(chatId)
+                  await fetchChats()
+                  break
+
+                case "discussion_rejected":
+                  setStreamingState((prev) => ({
+                    ...prev,
+                    isStreaming: false,
+                    finalVotes: event.votes,
+                    rejectionReason: event.reason,
                   }))
                   await fetchChat(chatId)
                   await fetchChats()

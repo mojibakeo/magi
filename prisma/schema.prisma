@@ -57,17 +57,19 @@ model Round {
 }
 
 model Vote {
-  id         String   @id @default(cuid())
-  roundId    String   @map("round_id")
-  system     String
-  status     String
-  approve    Boolean
-  agreement  String
-  concern    String
-  suggestion String
-  reason     String
-  createdAt  DateTime @default(now()) @map("created_at")
-  round      Round    @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  id                 String   @id @default(cuid())
+  roundId            String   @map("round_id")
+  system             String
+  status             String
+  approve            Boolean
+  agreement          String
+  concern            String
+  suggestion         String
+  reason             String
+  unresolvable       Boolean  @default(false)
+  unresolvableReason String   @default("") @map("unresolvable_reason")
+  createdAt          DateTime @default(now()) @map("created_at")
+  round              Round    @relation(fields: [roundId], references: [id], onDelete: Cascade)
 
   @@map("votes")
 }

@@ -194,6 +194,8 @@ export const POST = async (request: NextRequest) => {
                   concern: v.concern,
                   suggestion: v.suggestion,
                   reason: v.reason,
+                  unresolvable: v.unresolvable,
+                  unresolvableReason: v.unresolvableReason,
                 })),
               })
             }
@@ -207,6 +209,25 @@ export const POST = async (request: NextRequest) => {
               await prisma.message.update({
                 where: { id: magiMessageId },
                 data: { content: event.conclusion },
+              })
+            }
+          }
+
+          if (event.type === "discussion_rejected") {
+            if (magiMessageId) {
+              const rejectionMessage = `## 議論の終了
+
+この議論は、2つ以上のMAGIシステムによって**本質的に解決不可能**と判断されました。
+
+### 理由
+${event.reason}
+
+---
+
+*質問を明確にするか、追加情報を提供することで再度お試しください。*`
+              await prisma.message.update({
+                where: { id: magiMessageId },
+                data: { content: rejectionMessage },
               })
             }
           }
