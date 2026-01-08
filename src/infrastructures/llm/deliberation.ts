@@ -7,15 +7,14 @@ import type {
   DeliberationRound,
 } from "@/types/llm"
 
-const STANCE_PATTERN = /MY STANCE:\s*(.+?)(?:\n|$)/i
-
-const extractStance = (content: string): string => {
-  const match = content.match(STANCE_PATTERN)
-  return match?.[1]?.trim() ?? content.slice(0, 200)
+type FeedbackForConclusion = {
+  concerns: string[]
+  suggestions: string[]
 }
 
 const generateUnifiedConclusion = async (
-  responses: LLMResponse[]
+  responses: LLMResponse[],
+  feedback?: FeedbackForConclusion
 ): Promise<string> => {
   const anthropic = new Anthropic()
 
@@ -23,12 +22,25 @@ const generateUnifiedConclusion = async (
     .map((r) => `【${r.system.toUpperCase()}】\n${r.content}`)
     .join("\n\n---\n\n")
 
+  const feedbackSection = feedback && (feedback.concerns.length > 0 || feedback.suggestions.length > 0)
+    ? `
+
+## 前回の投票からのフィードバック
+${feedback.concerns.length > 0 ? `### 懸念点\n${feedback.concerns.map(c => `- ${c}`).join("\n")}` : ""}
+${feedback.suggestions.length > 0 ? `### 改善提案\n${feedback.suggestions.map(s => `- ${s}`).join("\n")}` : ""}
+
+上記のフィードバックを考慮して統合結論を生成してください。`
+    : ""
+
   const prompt = `以下は3つのAIシステム（MAGI）が議論した結果です。これらの意見を統合し、1つの明確で読みやすい結論を生成してください。
 
 ${opinionsText}
+${feedbackSection}
 
 要件：
-- 3つの意見の共通点と重要なポイントを抽出して統合する
+- 3つの視点の違いを理解し、それぞれの強みを活かして統合する
+- 対立点がある場合は、その理由と解決の方向性を示す
+- 一方的に平均化するのではなく、各視点が補完し合う形で結論を構築する
 - 各システム名への言及は不要（統合された1つの結論として書く）
 - 日本語で回答する
 
@@ -62,10 +74,16 @@ Markdown整形ルール（必須）：
   }
 }
 
+export type VoteStatus = "approve" | "partial" | "reject"
+
 export type VoteResult = {
   system: MagiSystem
-  approve: boolean
-  reason: string
+  status: VoteStatus
+  approve: boolean // backward compatibility
+  agreement: string
+  concern: string
+  suggestion: string
+  reason: string // backward compatibility (combined summary)
 }
 
 export type DeliberationEvent =
@@ -92,6 +110,20 @@ export type DeliberationEvent =
     }
   | { type: "error"; system: MagiSystem; error: string }
 
+const parseVoteStatus = (voteText: string | undefined): VoteStatus => {
+  if (!voteText) return "reject"
+  const upper = voteText.toUpperCase()
+  if (upper === "APPROVE") return "approve"
+  if (upper === "PARTIAL") return "partial"
+  return "reject"
+}
+
+const extractSection = (response: string, sectionName: string): string => {
+  const regex = new RegExp(`${sectionName}:\\s*([\\s\\S]*?)(?=\\n(?:VOTE|AGREEMENT|CONCERN|SUGGESTION):|$)`, "i")
+  const match = response.match(regex)
+  return match?.[1]?.trim() ?? ""
+}
+
 const voteOnConclusion = async (
   clients: MagiClients,
   conclusion: string,
@@ -104,7 +136,7 @@ const voteOnConclusion = async (
       messages: [
         {
           role: "user" as const,
-          content: `以下の質問に対するMAGIシステムの統合結論について、あなたは賛成か反対かを投票してください。
+          content: `以下の質問に対するMAGIシステムの統合結論について評価してください。
 
 ## 元の質問
 ${originalQuestion}
@@ -115,32 +147,53 @@ ${conclusion}
 ## 投票方法
 以下の形式で回答してください：
 
-VOTE: APPROVE または REJECT
-REASON: 賛成/反対の理由（1-2文で簡潔に）
+VOTE: APPROVE / PARTIAL / REJECT
+- APPROVE: 結論に完全に同意する
+- PARTIAL: 大筋は同意するが、改善点がある
+- REJECT: 結論に重大な問題がある
+
+AGREEMENT: この結論で同意できる点（箇条書きで1-3点）
+
+CONCERN: 懸念点や改善が必要な点（なければ「なし」、箇条書きで1-3点）
+
+SUGGESTION: より良い結論にするための具体的な提案（なければ「なし」）
 
 重要：
-- 結論が質問に対して適切で、論理的に正しければ APPROVE
-- 結論に重大な誤りや不足があれば REJECT
-- 細かい表現の違いは気にせず、本質的な内容で判断してください`,
+- 完璧を求めず、ユーザーにとって有用な結論かどうかを判断基準とする
+- 自分の分析と完全に一致しなくても、論理的に妥当であれば APPROVE または PARTIAL を選ぶ
+- REJECT は重大な事実誤認や論理的欠陥がある場合のみ選択する`,
         },
       ],
     }
 
     try {
       const response = await clients[system].chat(voteRequest)
-      const approveMatch = response.match(/VOTE:\s*(APPROVE|REJECT)/i)
-      const reasonMatch = response.match(/REASON:\s*(.+?)(?:\n|$)/i)
+      const voteMatch = response.match(/VOTE:\s*(APPROVE|PARTIAL|REJECT)/i)
+      const status = parseVoteStatus(voteMatch?.[1])
+      const agreement = extractSection(response, "AGREEMENT")
+      const concern = extractSection(response, "CONCERN")
+      const suggestion = extractSection(response, "SUGGESTION")
+
+      const reason = concern && concern !== "なし" ? concern : agreement
 
       return {
         system,
-        approve: approveMatch?.[1]?.toUpperCase() === "APPROVE",
-        reason: reasonMatch?.[1]?.trim() ?? "理由なし",
+        status,
+        approve: status === "approve" || status === "partial",
+        agreement,
+        concern,
+        suggestion,
+        reason,
       }
     } catch (error) {
       console.error(`Vote failed for ${system}:`, error)
       return {
         system,
+        status: "reject" as VoteStatus,
         approve: false,
+        agreement: "",
+        concern: "投票エラー",
+        suggestion: "",
         reason: "投票エラー",
       }
     }
@@ -204,13 +257,24 @@ export const deliberate = async function* (
 ): AsyncGenerator<DeliberationEvent> {
   const rounds: DeliberationRound[] = []
   let previousResponses: LLMResponse[] = []
-  let previousRejectionReasons: string[] = []
+  let previousFeedback: FeedbackForConclusion | undefined
 
   const originalQuestion =
     messages.find((m) => m.role === "user")?.content ?? ""
 
   for (let roundNumber = 1; roundNumber <= config.maxRounds; roundNumber++) {
     yield { type: "round_start", round: roundNumber }
+
+    const feedbackText = previousFeedback
+      ? [
+          previousFeedback.concerns.length > 0
+            ? `【懸念点】\n${previousFeedback.concerns.map(c => `- ${c}`).join("\n")}`
+            : "",
+          previousFeedback.suggestions.length > 0
+            ? `【改善提案】\n${previousFeedback.suggestions.map(s => `- ${s}`).join("\n")}`
+            : "",
+        ].filter(Boolean).join("\n\n")
+      : undefined
 
     const request: LLMRequest = {
       messages,
@@ -221,10 +285,7 @@ export const deliberate = async function* (
               content: r.content,
             }))
           : undefined,
-      rejectionReasons:
-        previousRejectionReasons.length > 0
-          ? previousRejectionReasons
-          : undefined,
+      rejectionReasons: feedbackText ? [feedbackText] : undefined,
     }
 
     const systems: MagiSystem[] = ["melchior", "balthasar", "casper"]
@@ -315,11 +376,9 @@ export const deliberate = async function* (
 
     const currentResponses: LLMResponse[] = []
     for (const stream of pendingStreams) {
-      const opinion = extractStance(stream.content)
       currentResponses.push({
         system: stream.system,
         content: stream.content,
-        opinion,
       })
       yield {
         type: "response_complete",
@@ -340,7 +399,7 @@ export const deliberate = async function* (
 
     // 統合結論を生成
     yield { type: "generating_conclusion" }
-    const unifiedConclusion = await generateUnifiedConclusion(currentResponses)
+    const unifiedConclusion = await generateUnifiedConclusion(currentResponses, previousFeedback)
     yield { type: "conclusion_generated", conclusion: unifiedConclusion }
 
     // 3つのLLMに投票させる
@@ -367,17 +426,22 @@ export const deliberate = async function* (
       return
     }
 
-    // 反対理由を次のラウンドに渡す
-    previousRejectionReasons = votes
-      .filter((v) => !v.approve)
-      .map((v) => `${v.system.toUpperCase()}: ${v.reason}`)
+    // フィードバックを次のラウンドに渡す
+    const concerns = votes
+      .filter((v) => v.concern && v.concern !== "なし")
+      .map((v) => `${v.system.toUpperCase()}: ${v.concern}`)
+    const suggestions = votes
+      .filter((v) => v.suggestion && v.suggestion !== "なし")
+      .map((v) => `${v.system.toUpperCase()}: ${v.suggestion}`)
+
+    previousFeedback = { concerns, suggestions }
     previousResponses = currentResponses
   }
 
   // max rounds に達した場合、最後の結論と投票結果を返す
   const lastRound = rounds[rounds.length - 1]
   const finalConclusion = lastRound
-    ? await generateUnifiedConclusion(lastRound.responses)
+    ? await generateUnifiedConclusion(lastRound.responses, previousFeedback)
     : "No conclusion reached"
 
   // 最後のラウンドの投票を取得

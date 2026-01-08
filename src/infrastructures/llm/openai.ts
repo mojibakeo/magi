@@ -107,7 +107,7 @@ export const createOpenAIClient = (apiKey: string): LLMClient => {
     system,
     chat: async (request: LLMRequest): Promise<string> => {
       const response = await client.chat.completions.create({
-        model: "gpt-4o",
+        model: "gpt-4.1-mini",
         max_tokens: 4096,
         messages: buildMessages(request),
       })
@@ -118,7 +118,7 @@ export const createOpenAIClient = (apiKey: string): LLMClient => {
       request: LLMRequest
     ): AsyncGenerator<LLMStreamChunk> {
       const stream = await client.chat.completions.create({
-        model: "gpt-4o",
+        model: "gpt-4.1-mini",
         max_tokens: 4096,
         messages: buildMessages(request),
         stream: true,

@@ -181,6 +181,24 @@ export const POST = async (request: NextRequest) => {
             }
           }
 
+          if (event.type === "voting_complete") {
+            const roundIdForVotes = lastRoundId
+            if (roundIdForVotes) {
+              await prisma.vote.createMany({
+                data: event.votes.map((v) => ({
+                  roundId: roundIdForVotes,
+                  system: v.system,
+                  status: v.status,
+                  approve: v.approve,
+                  agreement: v.agreement,
+                  concern: v.concern,
+                  suggestion: v.suggestion,
+                  reason: v.reason,
+                })),
+              })
+            }
+          }
+
           if (
             event.type === "consensus_reached" ||
             event.type === "max_rounds_reached"

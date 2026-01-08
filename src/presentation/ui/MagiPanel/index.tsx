@@ -1,7 +1,6 @@
 "use client"
 
 import type { FC } from "react"
-import { useMemo } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import type { MagiSystem } from "@/types/llm"
@@ -12,24 +11,18 @@ type MagiPanelProps = {
   isStreaming?: boolean
 }
 
-const SYSTEM_CONFIG: Record<
-  MagiSystem,
-  { name: string; color: string; role: string }
-> = {
+const SYSTEM_CONFIG: Record<MagiSystem, { name: string; color: string }> = {
   melchior: {
     name: "MELCHIOR",
     color: "var(--melchior)",
-    role: "バランス",
   },
   balthasar: {
     name: "BALTHASAR",
     color: "var(--balthasar)",
-    role: "悲観",
   },
   casper: {
     name: "CASPER",
     color: "var(--casper)",
-    role: "楽観",
   },
 }
 
@@ -39,11 +32,6 @@ export const MagiPanel: FC<MagiPanelProps> = ({
   isStreaming = false,
 }) => {
   const config = SYSTEM_CONFIG[system]
-
-  const stanceMatch = useMemo(() => {
-    const match = content.match(/MY STANCE:\s*(.+?)(?:\n|$)/i)
-    return match?.[1]?.trim()
-  }, [content])
 
   return (
     <div className="flex max-h-80 flex-col rounded-lg border border-[var(--border)] bg-[var(--card-bg)] overflow-hidden">
@@ -57,7 +45,6 @@ export const MagiPanel: FC<MagiPanelProps> = ({
             style={{ backgroundColor: config.color }}
           />
           <span className="font-mono text-sm font-bold">{config.name}</span>
-          <span className="text-xs text-gray-500">({config.role})</span>
         </div>
         {isStreaming && (
           <span className="text-xs text-gray-400 animate-pulse">
@@ -74,15 +61,6 @@ export const MagiPanel: FC<MagiPanelProps> = ({
           <p className="text-sm text-gray-500 italic">Waiting for response...</p>
         )}
       </div>
-      {stanceMatch && (
-        <div
-          className="shrink-0 px-3 py-2 border-t border-[var(--border)] text-xs"
-          style={{ color: config.color }}
-        >
-          <span className="font-bold">STANCE: </span>
-          {stanceMatch}
-        </div>
-      )}
     </div>
   )
 }

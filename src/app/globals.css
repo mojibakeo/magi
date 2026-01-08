@@ -32,6 +32,104 @@ body {
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
 
+.final-conclusion table,
+.final-conclusion thead,
+.final-conclusion tbody,
+.final-conclusion tr,
+.final-conclusion th,
+.final-conclusion td {
+  border-color: var(--border);
+}
+
+.final-conclusion :where(h1, h2, h3, h4) {
+  margin-top: 1rem !important;
+  margin-bottom: 0.6rem !important;
+  font-weight: 700 !important;
+  color: #f1f1f1 !important;
+  letter-spacing: 0.01em;
+}
+
+.final-conclusion :where(h1) {
+  font-size: 1.1rem !important;
+}
+
+.final-conclusion :where(h2) {
+  font-size: 1.02rem !important;
+}
+
+.final-conclusion :where(h3) {
+  font-size: 0.95rem !important;
+}
+
+.final-conclusion :where(h4) {
+  font-size: 0.9rem !important;
+}
+
+.final-conclusion :where(p, ul, ol, table) {
+  margin-bottom: 0.75rem !important;
+}
+
+.final-conclusion :where(ul, ol) {
+  padding-left: 1.1rem !important;
+}
+
+.final-conclusion :where(li) {
+  margin-bottom: 0.3rem !important;
+}
+
+.final-conclusion table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 0.75rem 0;
+  background: #151515;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.final-conclusion thead {
+  background: #1f1f1f;
+}
+
+.final-conclusion th,
+.final-conclusion td {
+  padding: 0.6rem 0.75rem;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.final-conclusion th:last-child,
+.final-conclusion td:last-child {
+  border-right: none;
+}
+
+.final-conclusion tr:last-child td {
+  border-bottom: none;
+}
+
+.final-conclusion th {
+  font-weight: 700;
+  color: #f1f1f1;
+  letter-spacing: 0.02em;
+}
+
+.final-conclusion tbody tr:nth-child(odd) {
+  background: #171717;
+}
+
+.final-conclusion tbody tr:nth-child(even) {
+  background: #141414;
+}
+
+.final-conclusion tbody tr:hover {
+  background: #1c1c1c;
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;

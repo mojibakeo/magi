@@ -15,7 +15,6 @@ export type LLMMessage = {
 export type LLMResponse = {
   system: MagiSystem
   content: string
-  opinion: string // extracted opinion/stance
 }
 
 export type DeliberationRound = {

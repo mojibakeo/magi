@@ -35,8 +35,22 @@ const UserMessage: FC<{ message: MessageData }> = ({ message }) => (
   </div>
 )
 
+const getVoteStatusConfig = (status: VoteData["status"]) => {
+  switch (status) {
+    case "approve":
+      return { label: "賛成", bgClass: "bg-green-900/30", textClass: "text-green-400" }
+    case "partial":
+      return { label: "条件付き賛成", bgClass: "bg-yellow-900/30", textClass: "text-yellow-400" }
+    case "reject":
+      return { label: "反対", bgClass: "bg-red-900/30", textClass: "text-red-400" }
+    default:
+      return { label: "不明", bgClass: "bg-gray-900/30", textClass: "text-gray-400" }
+  }
+}
+
 const VotingResult: FC<{ votes: VoteData[] }> = ({ votes }) => {
   const approveCount = votes.filter((v) => v.approve).length
+  const [expandedVote, setExpandedVote] = useState<MagiSystem | null>(null)
 
   return (
     <div className="mt-3 border-t border-[var(--border)] pt-3">
@@ -51,23 +65,52 @@ const VotingResult: FC<{ votes: VoteData[] }> = ({ votes }) => {
         </span>
       </div>
       <div className="grid grid-cols-3 gap-2">
-        {votes.map((vote) => (
-          <div
-            key={vote.system}
-            className={`rounded px-2 py-1 text-xs ${
-              vote.approve
-                ? "bg-green-900/30 text-green-400"
-                : "bg-red-900/30 text-red-400"
-            }`}
-          >
-            <div className="font-medium">
-              {vote.system.toUpperCase()}: {vote.approve ? "賛成" : "反対"}
+        {votes.map((vote) => {
+          const statusConfig = getVoteStatusConfig(vote.status)
+          const isExpanded = expandedVote === vote.system
+
+          return (
+            <div
+              key={vote.system}
+              className={`rounded ${statusConfig.bgClass} ${statusConfig.textClass}`}
+            >
+              <button
+                type="button"
+                onClick={() => setExpandedVote(isExpanded ? null : vote.system)}
+                className="w-full px-2 py-1 text-xs text-left"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">
+                    {vote.system.toUpperCase()}: {statusConfig.label}
+                  </span>
+                  <span className="text-gray-500">{isExpanded ? "▼" : "▶"}</span>
+                </div>
+              </button>
+              {isExpanded && (
+                <div className="px-2 pb-2 text-xs space-y-1">
+                  {vote.agreement && vote.agreement !== "なし" && (
+                    <div>
+                      <span className="text-green-500">同意点:</span>
+                      <p className="text-gray-400 whitespace-pre-wrap">{vote.agreement}</p>
+                    </div>
+                  )}
+                  {vote.concern && vote.concern !== "なし" && (
+                    <div>
+                      <span className="text-yellow-500">懸念点:</span>
+                      <p className="text-gray-400 whitespace-pre-wrap">{vote.concern}</p>
+                    </div>
+                  )}
+                  {vote.suggestion && vote.suggestion !== "なし" && (
+                    <div>
+                      <span className="text-blue-400">提案:</span>
+                      <p className="text-gray-400 whitespace-pre-wrap">{vote.suggestion}</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-            <div className="text-gray-400 truncate" title={vote.reason}>
-              {vote.reason}
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
@@ -137,8 +180,10 @@ const RoundDisplay: FC<{
           {round.conclusion && (
             <div className="rounded-lg border border-[var(--primary)]/50 bg-[var(--card-bg)]/50 p-4">
               <div className="text-xs text-[var(--primary)] mb-2 font-medium">統合結論:</div>
-              <div className="prose prose-sm prose-invert max-w-none text-gray-300">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{round.conclusion}</ReactMarkdown>
+              <div className="prose prose-sm prose-invert max-w-none text-gray-300 final-conclusion">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {round.conclusion}
+                </ReactMarkdown>
               </div>
             </div>
           )}
@@ -255,8 +300,10 @@ const StreamingMessage: FC<{ streamingState: StreamingState }> = ({
                     </span>
                   )}
                 </div>
-                <div className="prose prose-sm prose-invert max-w-none text-gray-300">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{streamingState.currentConclusion}</ReactMarkdown>
+                <div className="prose prose-sm prose-invert max-w-none text-gray-300 final-conclusion">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {streamingState.currentConclusion}
+                  </ReactMarkdown>
                 </div>
               </div>
             </>

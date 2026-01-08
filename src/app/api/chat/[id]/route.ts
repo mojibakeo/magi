@@ -15,6 +15,11 @@ export const GET = async (_request: NextRequest, { params }: RouteParams) => {
         include: {
           files: true,
           rounds: {
+            include: {
+              votes: {
+                orderBy: { system: "asc" },
+              },
+            },
             orderBy: { number: "asc" },
           },
         },

@@ -7,9 +7,15 @@ export type ChatSummary = {
   updatedAt: string
 }
 
+export type VoteStatus = "approve" | "partial" | "reject"
+
 export type VoteData = {
   system: MagiSystem
+  status: VoteStatus
   approve: boolean
+  agreement: string
+  concern: string
+  suggestion: string
   reason: string
 }
 
