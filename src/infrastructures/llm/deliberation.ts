@@ -410,12 +410,20 @@ export const deliberate = async function* (
       yield { type: "vote", result: vote }
     }
 
-    const approveCount = votes.filter((v) => v.approve).length
-    const approved = approveCount >= 2
+    // 投票スコア計算: 賛成=1pt, 条件付き賛成=0.5pt, 反対=0pt
+    const calculateVoteScore = (v: VoteResult): number => {
+      switch (v.status) {
+        case "approve": return 1
+        case "partial": return 0.5
+        case "reject": return 0
+      }
+    }
+    const totalScore = votes.reduce((sum, v) => sum + calculateVoteScore(v), 0)
+    const approved = totalScore >= 2
 
     yield { type: "voting_complete", approved, votes }
 
-    // minRounds 以上かつ2票以上で合意成立
+    // minRounds 以上かつスコア2pt以上で合意成立
     if (approved && roundNumber >= config.minRounds) {
       yield {
         type: "consensus_reached",

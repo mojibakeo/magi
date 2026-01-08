@@ -4,7 +4,7 @@ import type { FC } from "react"
 import { useRef, useEffect, useState, useCallback } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
-import type { MessageData, StreamingState, RoundData, VoteData } from "@/types/chat"
+import type { MessageData, StreamingState, RoundData, VoteData, VoteStatus } from "@/types/chat"
 import type { FileAttachment, MagiSystem } from "@/types/llm"
 import { ChatInput } from "@/presentation/ui/Input"
 import { MagiPanel } from "@/presentation/ui/MagiPanel"
@@ -48,46 +48,51 @@ const getVoteStatusConfig = (status: VoteData["status"]) => {
   }
 }
 
+const calculateVoteScore = (status: VoteStatus): number => {
+  switch (status) {
+    case "approve": return 1
+    case "partial": return 0.5
+    case "reject": return 0
+  }
+}
+
 const VotingResult: FC<{ votes: VoteData[] }> = ({ votes }) => {
-  const approveCount = votes.filter((v) => v.approve).length
-  const [expandedVote, setExpandedVote] = useState<MagiSystem | null>(null)
+  const totalScore = votes.reduce((sum, v) => sum + calculateVoteScore(v.status), 0)
+  const [isExpanded, setIsExpanded] = useState(false)
 
   return (
     <div className="mt-3 border-t border-[var(--border)] pt-3">
-      <div className="flex items-center gap-2 mb-2">
+      <button
+        type="button"
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center gap-2 mb-2 hover:opacity-80"
+      >
         <span className="text-xs font-medium text-gray-400">投票結果:</span>
         <span
           className={`text-xs font-bold ${
-            approveCount >= 2 ? "text-green-400" : "text-yellow-400"
+            totalScore >= 2 ? "text-green-400" : "text-yellow-400"
           }`}
         >
-          {approveCount}/3 賛成
+          {totalScore}/3 pt
         </span>
-      </div>
+        <span className="text-xs text-gray-500">{isExpanded ? "▼" : "▶"}</span>
+      </button>
       <div className="grid grid-cols-3 gap-2">
         {votes.map((vote) => {
           const statusConfig = getVoteStatusConfig(vote.status)
-          const isExpanded = expandedVote === vote.system
 
           return (
             <div
               key={vote.system}
               className={`rounded ${statusConfig.bgClass} ${statusConfig.textClass}`}
             >
-              <button
-                type="button"
-                onClick={() => setExpandedVote(isExpanded ? null : vote.system)}
-                className="w-full px-2 py-1 text-xs text-left"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">
-                    {vote.system.toUpperCase()}: {statusConfig.label}
-                  </span>
-                  <span className="text-gray-500">{isExpanded ? "▼" : "▶"}</span>
+              <div className="px-2 py-1 text-xs">
+                <div className="font-medium">
+                  {vote.system.toUpperCase()}: {statusConfig.label}
                 </div>
-              </button>
+              </div>
               {isExpanded && (
-                <div className="px-2 pb-2 text-xs space-y-1">
+                <div className="px-2 pb-2 text-xs space-y-1 border-t border-white/10 pt-1">
                   {vote.agreement && vote.agreement !== "なし" && (
                     <div>
                       <span className="text-green-500">同意点:</span>
@@ -116,13 +121,19 @@ const VotingResult: FC<{ votes: VoteData[] }> = ({ votes }) => {
   )
 }
 
-const formatVoterNames = (votes: VoteData[]): { approve: string; reject: string } => {
-  const approvers = votes.filter((v) => v.approve).map((v) => v.system.toUpperCase())
-  const rejecters = votes.filter((v) => !v.approve).map((v) => v.system.toUpperCase())
+const formatVotersByStatus = (votes: VoteData[]): { approve: string; partial: string; reject: string } => {
+  const approvers = votes.filter((v) => v.status === "approve").map((v) => v.system.toUpperCase())
+  const partials = votes.filter((v) => v.status === "partial").map((v) => v.system.toUpperCase())
+  const rejecters = votes.filter((v) => v.status === "reject").map((v) => v.system.toUpperCase())
   return {
-    approve: approvers.join(", ") || "なし",
-    reject: rejecters.join(", ") || "なし",
+    approve: approvers.join(", ") || "",
+    partial: partials.join(", ") || "",
+    reject: rejecters.join(", ") || "",
   }
+}
+
+const calculateRoundScore = (votes: VoteData[]): number => {
+  return votes.reduce((sum, v) => sum + calculateVoteScore(v.status), 0)
 }
 
 const RoundDisplay: FC<{
@@ -131,8 +142,8 @@ const RoundDisplay: FC<{
   onToggle: () => void
   isFinal?: boolean
 }> = ({ round, isExpanded, onToggle, isFinal = false }) => {
-  const approveCount = round.votes?.filter((v) => v.approve).length ?? 0
-  const voterNames = round.votes ? formatVoterNames(round.votes) : undefined
+  const totalScore = round.votes ? calculateRoundScore(round.votes) : 0
+  const votersByStatus = round.votes ? formatVotersByStatus(round.votes) : undefined
 
   return (
     <div className={`border rounded-lg overflow-hidden ${isFinal ? "border-[var(--primary)]" : "border-[var(--border)]"}`}>
@@ -151,19 +162,21 @@ const RoundDisplay: FC<{
           {round.votes && (
             <span
               className={`text-xs px-2 py-0.5 rounded ${
-                approveCount >= 2
+                totalScore >= 2
                   ? "bg-green-900/30 text-green-400"
                   : "bg-yellow-900/30 text-yellow-400"
               }`}
             >
-              {approveCount}/3 賛成
+              {totalScore}/3 pt
             </span>
           )}
-          {voterNames && (
+          {votersByStatus && (
             <span className="text-xs text-gray-500">
-              賛成: <span className="text-green-400">{voterNames.approve}</span>
-              {" / "}
-              反対: <span className="text-red-400">{voterNames.reject}</span>
+              {votersByStatus.approve && <><span className="text-green-400">{votersByStatus.approve}</span></>}
+              {votersByStatus.approve && (votersByStatus.partial || votersByStatus.reject) && " / "}
+              {votersByStatus.partial && <><span className="text-yellow-400">{votersByStatus.partial}</span></>}
+              {votersByStatus.partial && votersByStatus.reject && " / "}
+              {votersByStatus.reject && <><span className="text-red-400">{votersByStatus.reject}</span></>}
             </span>
           )}
         </div>
