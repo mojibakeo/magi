@@ -1,0 +1,56 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Chat {
+  id        String    @id @default(cuid())
+  title     String
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  messages  Message[]
+
+  @@map("chats")
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  chatId    String   @map("chat_id")
+  role      String
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  files     File[]
+  rounds    Round[]
+
+  @@map("messages")
+}
+
+model File {
+  id        String  @id @default(cuid())
+  messageId String  @map("message_id")
+  name      String
+  mimeType  String  @map("mime_type")
+  path      String
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@map("files")
+}
+
+model Round {
+  id         String  @id @default(cuid())
+  messageId  String  @map("message_id")
+  number     Int
+  melchior   String
+  balthasar  String
+  casper     String
+  consensus  String?
+  conclusion String?
+  message    Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@map("rounds")
+}
