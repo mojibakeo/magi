@@ -15,7 +15,7 @@ export const env = {
   openaiApiKey: () => getEnvVar("OPENAI_API_KEY"),
   geminiApiKey: () => getEnvVar("GEMINI_API_KEY"),
   magiMinRounds: () =>
-    parseInt(getOptionalEnvVar("MAGI_MIN_ROUNDS", "3"), 10),
+    parseInt(getOptionalEnvVar("MAGI_MIN_ROUNDS", "1"), 10),
   magiMaxRounds: () =>
     parseInt(getOptionalEnvVar("MAGI_MAX_ROUNDS", "20"), 10),
 }

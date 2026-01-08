@@ -14,6 +14,7 @@ type FeedbackForConclusion = {
 
 const generateUnifiedConclusion = async (
   responses: LLMResponse[],
+  originalQuestion: string,
   feedback?: FeedbackForConclusion
 ): Promise<string> => {
   const anthropic = new Anthropic()
@@ -32,12 +33,18 @@ ${feedback.suggestions.length > 0 ? `### 改善提案\n${feedback.suggestions.ma
 上記のフィードバックを考慮して統合結論を生成してください。`
     : ""
 
-  const prompt = `以下は3つのAIシステム（MAGI）が議論した結果です。これらの意見を統合し、1つの明確で読みやすい結論を生成してください。
+  const prompt = `以下は3つのAIシステム（MAGI）がユーザーからの質問・依頼に対して議論した結果です。これらの意見を統合し、1つの明確で読みやすい結論を生成してください。
 
+## ユーザーからの元の質問・依頼
+${originalQuestion}
+
+## 3つのシステムの意見
 ${opinionsText}
 ${feedbackSection}
 
 要件：
+- **最重要：ユーザーの元の質問・依頼に対して直接的に回答・対応する結論であること**
+- ユーザーが求めていることを満たさない結論は不可
 - 3つの視点の違いを理解し、それぞれの強みを活かして統合する
 - 対立点がある場合は、その理由と解決の方向性を示す
 - 一方的に平均化するのではなく、各視点が補完し合う形で結論を構築する
@@ -138,7 +145,7 @@ const voteOnConclusion = async (
           role: "user" as const,
           content: `以下の質問に対するMAGIシステムの統合結論について評価してください。
 
-## 元の質問
+## 元の質問・依頼
 ${originalQuestion}
 
 ## 統合結論
@@ -159,9 +166,13 @@ CONCERN: 懸念点や改善が必要な点（なければ「なし」、箇条�
 SUGGESTION: より良い結論にするための具体的な提案（なければ「なし」）
 
 重要：
+- **最重要：ユーザーの元の質問・依頼に対して直接回答しているかを最優先で評価する**
+- ユーザーが求めていることを満たさない結論には必ず REJECT を投じる
 - 完璧を求めず、ユーザーにとって有用な結論かどうかを判断基準とする
 - 自分の分析と完全に一致しなくても、論理的に妥当であれば APPROVE または PARTIAL を選ぶ
-- REJECT は重大な事実誤認や論理的欠陥がある場合のみ選択する`,
+- REJECT は以下の場合に選択する：
+  1. ユーザーの依頼に対する回答になっていない
+  2. 重大な事実誤認や論理的欠陥がある`,
         },
       ],
     }
@@ -399,7 +410,7 @@ export const deliberate = async function* (
 
     // 統合結論を生成
     yield { type: "generating_conclusion" }
-    const unifiedConclusion = await generateUnifiedConclusion(currentResponses, previousFeedback)
+    const unifiedConclusion = await generateUnifiedConclusion(currentResponses, originalQuestion, previousFeedback)
     yield { type: "conclusion_generated", conclusion: unifiedConclusion }
 
     // 3つのLLMに投票させる
@@ -449,7 +460,7 @@ export const deliberate = async function* (
   // max rounds に達した場合、最後の結論と投票結果を返す
   const lastRound = rounds[rounds.length - 1]
   const finalConclusion = lastRound
-    ? await generateUnifiedConclusion(lastRound.responses, previousFeedback)
+    ? await generateUnifiedConclusion(lastRound.responses, originalQuestion, previousFeedback)
     : "No conclusion reached"
 
   // 最後のラウンドの投票を取得
